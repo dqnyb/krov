@@ -162,7 +162,7 @@ def categoria_preferata(categoria):
     if decizie == "DA":
         culori_formatate = extrage_culori_si_coduri(result1['result'], culori_hex)
     else:
-        culori_formatate = "Culorile nu sunt specificate."
+        culori_formatate = "Culorile nu sunt specificate (poti alege orice culoare la urmatorul pas). <br><br>"
 
     result_final = result['result'] + "<br><br>" + culori_formatate
     return result_final
