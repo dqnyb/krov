@@ -1,5 +1,5 @@
 from openai import OpenAI
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_cors import CORS
 from openpyxl import Workbook, load_workbook
 from datetime import datetime
@@ -2174,6 +2174,13 @@ def ask_with_ai(messages , temperature = 0.9 , max_tokens = 100):
 def home():
     return render_template("website.html")
 
+@app.route('/chat-widget.js')
+def serve_js():
+    return send_from_directory('chatBot', 'chat-widget.js')
+
+@app.route('/web-css.css')
+def serve_css():
+    return send_from_directory('chatBot', 'web-css.css')
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
