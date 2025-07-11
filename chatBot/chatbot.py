@@ -971,12 +971,28 @@ def check_price(produs_exact):
 
 
 def extrage_total_din_text(text):
-    parti = text.split(":")
-    text = parti[1]
-    print("aceasta e partea = ", text)
-    numere = re.findall(r"(?<![a-zA-Z])(\d+(?:[.,]\d+)?)", text)
-    if numere:
-        return float(numere[0].replace(",", "."))
+    try:
+        # Încearcă să extragi partea de după ":"
+        parti = text.split(":")
+        if len(parti) > 1:
+            text_parte = parti[1]
+        else:
+            text_parte = text
+        print("aceasta e partea = ", text_parte)
+
+        # Caută număr în partea respectivă
+        numere = re.findall(r"(?<![a-zA-Z])(\d+(?:[.,]\d+)?)", text_parte)
+        if numere:
+            return float(numere[0].replace(",", "."))
+        
+        # Dacă nu a găsit în partea după ":", încearcă din tot textul
+        numere_totale = re.findall(r"(?<![a-zA-Z])(\d+(?:[.,]\d+)?)", text)
+        if numere_totale:
+            return float(numere_totale[0].replace(",", "."))
+        
+    except Exception as e:
+        print("Eroare la extragere preț:", e)
+    
     return None
 
 
