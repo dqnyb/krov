@@ -205,7 +205,7 @@
             chatMessages.appendChild(typingElement);
             chatMessages.scrollTop = chatMessages.scrollHeight;
 
-            fetch("http://127.0.0.1:5000/language")
+            fetch("https://krov.onrender.com/language")
               .then(res => res.json())
               .then(data => {
                 setTimeout(() => {
@@ -256,7 +256,7 @@
           chatMessages.appendChild(typingElement);
           chatMessages.scrollTop = chatMessages.scrollHeight;
         
-          fetch("http://127.0.0.1:5000/start", {
+          fetch("https://krov.onrender.com/start", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name: userName })
@@ -295,7 +295,7 @@
           chatMessages.appendChild(typingElement);
           chatMessages.scrollTop = chatMessages.scrollHeight;
         
-          fetch("http://127.0.0.1:5000/interests", {
+          fetch("https://krov.onrender.com/interests", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name: userName , language: window.language})
@@ -341,7 +341,7 @@
           chatMessages.appendChild(typingElement);
           chatMessages.scrollTop = chatMessages.scrollHeight;
         
-          fetch("http://127.0.0.1:5000/welcome", {
+          fetch("https://krov.onrender.com/welcome", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name: userName, interests: userInterests , language: window.language})
@@ -371,7 +371,7 @@
         }
         
         if (onboardingStep == 3) {
-            fetch("http://127.0.0.1:5000/chat", {
+            fetch("https://krov.onrender.com/chat", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -395,7 +395,7 @@
           }
 
         if (onboardingStep == 4) {
-            fetch("http://127.0.0.1:5000/next_chat", {
+            fetch("https://krov.onrender.com/next_chat", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -437,7 +437,7 @@
             chatMessages.appendChild(typingElement);
             chatMessages.scrollTop = chatMessages.scrollHeight;
           
-            fetch("http://127.0.0.1:5000/comanda", {
+            fetch("https://krov.onrender.com/comanda", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ name: userName, interests: userInterests, message: message , language: window.language})
@@ -480,7 +480,7 @@
             chatMessages.appendChild(typingElement);
             chatMessages.scrollTop = chatMessages.scrollHeight;
           
-            fetch("http://127.0.0.1:5000/numar_de_telefon", {
+            fetch("https://krov.onrender.com/numar_de_telefon", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ name: userName, interests: userInterests, message: message, language: window.language })
@@ -523,7 +523,7 @@
             chatMessages.appendChild(typingElement);
             chatMessages.scrollTop = chatMessages.scrollHeight;
           
-            fetch("http://127.0.0.1:5000/categorie", {
+            fetch("https://krov.onrender.com/categorie", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ name: userName, interests: userInterests, message: message, language: window.language })
@@ -569,7 +569,7 @@
             chatMessages.appendChild(typingElement);
             chatMessages.scrollTop = chatMessages.scrollHeight;
           
-            fetch("http://127.0.0.1:5000/produs", {
+            fetch("https://krov.onrender.com/produs", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ name: userName, interests: userInterests, message: message, language: window.language })
@@ -613,7 +613,7 @@
             chatMessages.appendChild(typingElement);
             chatMessages.scrollTop = chatMessages.scrollHeight;
           
-            fetch("http://127.0.0.1:5000/culoare", {
+            fetch("https://krov.onrender.com/culoare", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ name: userName, interests: userInterests, message: message, language: window.language })
@@ -656,7 +656,7 @@
             chatMessages.appendChild(typingElement);
             chatMessages.scrollTop = chatMessages.scrollHeight;
           
-            fetch("http://127.0.0.1:5000/cantitate", {
+            fetch("https://krov.onrender.com/cantitate", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ name: userName, interests: userInterests, message: message, language: window.language })
@@ -688,7 +688,7 @@
 
       
         // Chat normal
-        fetch("http://127.0.0.1:5000/chat", {
+        fetch("https://krov.onrender.com/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message })
