@@ -993,7 +993,7 @@ def extrage_total_din_text(text):
     except Exception as e:
         print("Eroare la extragere preț:", e)
     
-    return None
+    return 100
 
 
 def print_price(pret_produs, cantitate, produsul_extras, culoare_aleasa, masurare, language):
