@@ -11,3 +11,4 @@ langchain
 chromadb
 openai
 langchain-openai
+langchain-community
