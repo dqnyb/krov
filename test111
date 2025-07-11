@@ -1,0 +1,609 @@
+from openai import OpenAI
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from openpyxl import Workbook, load_workbook
+from datetime import datetime
+import openai
+import pandas as pd
+import os
+import random
+from dotenv import load_dotenv
+import pandas as pd
+from thefuzz import fuzz
+from thefuzz import process
+import test
+from test import categoria_preferata
+import re
+from difflib import SequenceMatcher
+
+app = Flask(__name__)
+CORS(app)
+
+load_dotenv()
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+openai.api_key = OPENAI_API_KEY
+# Pentru acest proiect am lăsat cheia publică (pentru a fi testată mai repede), dar desigur că nu se face așa!
+# Aș fi folosit client = OpenAI(api_key=os.getenv("OPENAI_API_KEY")) și aș fi dat export în env la key: export OPENAI_API_KEY="sk-..."
+
+client = OpenAI(
+    api_key=OPENAI_API_KEY,  # pune aici cheia ta reală!
+)
+
+preferinte = {}
+
+df = pd.read_excel('p.xlsx')
+categorii = df['Categorie']
+categorii_unice = list(dict.fromkeys(categorii.dropna().astype(str)))
+
+# print(categorii_unice)
+def log_message(sender, message):
+    # Creează calea absolută către folderul logs ! Pentru a salva log-urile in excel !
+    base_dir = os.path.expanduser("../logs")
+    os.makedirs(base_dir, exist_ok=True)
+    file_path = os.path.join(base_dir, "chat_log1.xlsx")
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    new_row = {"Timestamp": timestamp, "Sender": sender, "Message": message}
+
+    try:
+        if os.path.exists(file_path):
+            df = pd.read_excel(file_path)
+            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+        else:
+            df = pd.DataFrame([new_row])
+
+        df.to_excel(file_path, index=False)
+        print(f"[{timestamp}] [LOGGED] {sender}: {message}")
+    except Exception as e:
+        print(f"[EROARE] Logarea a eșuat: {e}")
+
+
+@app.route("/start", methods=["GET"])
+def start():
+    welcome_message = (
+        "Salut! 👋 Cu ce te pot ajuta? Vrei detalii despre un produs sau dorești să plasezi o comandă?"
+    )
+    return jsonify({"ask_name": welcome_message})
+
+def check_interest(interest):
+    interests_prompt = (
+        "Analizează mesajul utilizatorului pentru a identifica intenția exactă în funcție de următoarele categorii detaliate:\n\n"
+        
+        "1. produs_informații - INCLUD și intenții preliminare de cumpărare, exprimări generale, curiozitate sau cerere de categorii. Se clasifică aici orice interes pentru:\n"
+        "- produse, modele, game, colecții, serii, culori, categorii ('Ce aveți?', 'Ce modele mai sunt?', 'Mai aveți și alte produse?')\n"
+        "- expresii generice sau incomplete: 'produse?', 'categorii?', 'alte modele?', 'impermeabile?' – chiar dacă nu există întrebare completă\n"
+        "- expresii vagi sau generale de interes: 'vreau produsul', 'doresc un model', 'aș vrea să văd', 'ce aveți în categoria X'\n"
+        "- întrebări despre specificații, caracteristici, opțiuni de personalizare, materiale, întreținere\n"
+        "- comparații între produse/serii\n"
+        "- solicitări de imagini, cataloage, mostre\n"
+        "- întrebări despre disponibilitate, dimensiuni, stoc, livrare (doar dacă nu menționează acțiunea de a comanda)\n"
+        "- întrebări despre garanție, montaj\n"
+        "- mențiuni despre preț fără cerere explicită de ofertă sau acțiune\n"
+        "- orice exprimare incertă sau ambiguu-intenționată\n\n"
+        
+        "2. comandă - DOAR când există acțiune explicită, clar formulată:\n"
+        "- 'vreau să comand', 'doresc să cumpăr', 'aș vrea să achiziționez'\n"
+        "- cerere de ofertă pentru cantitate definită: 'cât ar costa 30 bucăți', 'trimiteți-mi prețul pentru 50mp'\n"
+        "- formulări despre termeni de livrare/plată pentru o tranzacție iminentă\n"
+        "- orice formulare cu verb concret de tranzacție: 'comand', 'achiziționez', 'cumpăr', 'plătesc', 'trimiteți factura'\n"
+        "- expresii de încheiere a comenzii: 'hai să finalizăm', 'pregătiți comanda', 'vă trimit datele de facturare'\n\n"
+        
+        "3. altceva - doar pentru:\n"
+        "- saluturi, mulțumiri fără context de afacere\n"
+        "- glume, spam, comentarii irelevante\n"
+        "- mesaje fără nicio legătură cu produsele sau comenzile\n\n"
+        
+        "REGULI IMPORTANTE:\n"
+        "- Orice mențiune despre produse, game, modele, categorii sau expresii generale => produs_informații\n"
+        "- Orice ambiguitate => produs_informații (mai bine fals pozitiv decât să ratezi o intenție)\n"
+        "- Doar când există verb clar de comandă => clasifici ca 'comandă'\n\n"
+        
+        "EXEMPLE CLASIFICATE:\n"
+        "'Ce modele impermeabile aveți?' => produs_informații\n"
+        "'Aveți și alte categorii?' => produs_informații\n"
+        "'Produse?' => produs_informații\n"
+        "'Aș dori să văd și alte variante' => produs_informații\n"
+        "'Vreau să comand 100mp pentru luni' => comandă\n"
+        "'Trimiteți factura pe email' => comandă\n"
+        "'Salut, bună' => altceva\n\n"
+        
+        f"Mesaj de analizat: \"{interest}\"\n\n"
+        "Răspunde STRICT cu unul dintre tag-uri: produs_informații, comandă, altceva. Fără explicații suplimentare."
+    )
+
+
+    messages = [{"role": "system", "content": interests_prompt}]
+    response = ask_with_ai(messages)
+    return response
+
+@app.route("/interests", methods=["POST"])
+def interests():
+    user_data = request.get_json()
+    interest = user_data.get("name", "prieten")
+
+    interest_checked = check_interest(interest)
+    print(interest_checked)
+    if (interest_checked == "produs_informații"):
+        messages = [
+            {
+                "role": "user",
+                "content": (
+                    "Nu spune niciodată „Salut”, gen toate chestiile introductive, pentru că noi deja ducem o discuție și ne cunoaștem. "
+                    "Fa promptul frumos , foloseste emoji-uri ( este despre un business de acoperisuri ) si pentur fiecare alegere adauga un emoji in loc de numere dar trebuie ca emojiurile sa fie strict legate de business de acoperisuri ( gen cand enumeri categoriile )"
+                    "Esti un chatbot inteligent care creezi un prompt interactiv si frumos pentru user si il intrebi ce produse doreste , din cele de mai jos (trebuie incluse toate in prompt fara RoofArt in fata):"
+                    f"Acestea sunt toate categoriile disponibile : {categorii_unice}"
+                    "Rogi userul sa raspunda cu denumirea exacta a produsului din lista de categorii"
+                )
+            }
+        ]
+    elif (interest_checked == "comandă"):
+        message  = "🌟 Mulțumim că ai ales KROV! Pentru a putea procesa comanda ta cât mai rapid, te rugăm frumos să ne spui numele și prenumele tău. 😊"
+        return jsonify({"ask_interests": message})
+    else:
+        messages = [
+            {
+                "role": "user",
+                "content": (
+                    f"Ești un bot inteligent care răspunde la întrebarea: {interest}. In maxim 80 tokenuri"
+                    "La finalul răspunsului tău, te rog să întrebi utilizatorul dacă dorește să aleagă un produs dintr-o categorie sau dacă dorește să plaseze o comandă."
+                )
+            }
+        ]
+
+
+
+    response = ask_with_ai(messages, temperature= 0.9 , max_tokens= 400)
+
+    if (interest_checked == "altceva"):
+        response = response + "!!!"
+
+    return jsonify({"ask_interests": response})
+
+def fuzzy_check_category(user_interest, categorii_unice, threshold=70):
+    user_interest = normalize_numere(user_interest)
+    categorii_unice = [normalize_numere(cat) for cat in categorii_unice]
+
+    best_match, best_score = process.extractOne(user_interest, categorii_unice, scorer=fuzz.token_set_ratio)
+
+    if best_score >= threshold:
+        return best_match
+
+    for word in user_interest.split():
+        best_match, best_score = process.extractOne(word, categorii_unice, scorer=fuzz.token_set_ratio)
+        if best_score >= threshold:
+            return best_match
+
+    return "NU"
+
+
+def smart_category_prompt(user_interest, categorii_unice):
+    prompt = (
+        "Având în vedere lista de categorii:\n"
+        f"{', '.join(categorii_unice)}\n"
+        f"Utilizatorul a spus: '{user_interest}'\n"
+        "Sugerează cea mai potrivită categorie dintre lista de mai sus. "
+        "Răspunde doar cu numele categoriei, fără alte explicații. "
+        "Dacă niciuna nu se potrivește, răspunde cu NU."
+    )
+    messages = [{"role": "system", "content": prompt}]
+    response = ask_with_ai(messages).strip()
+
+    if not response or response.upper() == "NU":
+        return "NU"
+    
+    # Poți face o verificare suplimentară să vezi dacă răspunsul chiar face parte din categorii
+    if response not in categorii_unice:
+        return "NU"
+
+    return response
+
+
+
+def check_and_get_category(user_interest, categorii_unice, threshold=70):
+    # Prima încercare: fuzzy matching
+    if is_comanda(user_interest):
+        return "comandă"
+
+    fuzzy_result = fuzzy_check_category(user_interest, categorii_unice, threshold)
+    print("fuzzy = " ,fuzzy_result)
+
+    if fuzzy_result != "NU":
+        return fuzzy_result
+
+    ai_result = smart_category_prompt(user_interest, categorii_unice)
+    return ai_result
+
+
+
+def is_comanda(user_interest):
+    intentii_comanda = [
+        "vreau să comand", "vreau sa comand", "doresc să cumpăr", "as dori sa cumpar",
+        "aș vrea să achiziționez", "comand", "achiziționez", "cumpăr", "plătesc",
+        "trimiteți factura", "hai să finalizăm", "pregătiți comanda", "trimit datele"
+    ]
+    
+    # Listez toate cuvintele din expresiile cheie
+    # Cuvintele din textul user
+    cuvinte_user = user_interest.lower().split()
+    # Verific fuzzy matching pentru fiecare cuvânt din user cu fiecare cuvânt cheie
+    for cuv_user in cuvinte_user:
+        for cuv_cheie in intentii_comanda:
+            similarity = SequenceMatcher(None, cuv_user, cuv_cheie).ratio()
+            if similarity > 0.8:  # prag de similaritate
+                return True
+    return False
+
+def normalize_numere(text):
+    cuvinte = text.split()
+    normalizate = []
+    for c in cuvinte:
+        print("c ==== ",c)
+        try:
+            num = float(c)
+            normalizate.append(f"{num:.2f}")
+        except:
+            normalizate.append(c)
+    return ' '.join(normalizate)
+
+
+def check_variante(user_interest, variante_posibile):
+
+    variante_fara_primul_cuvant = [' '.join(v.split()[1:]) for v in variante_posibile]
+    # print("variante = ", variante_posibile)
+    # print("user_interest = " , user_interest)
+    # user_interest = normalize_numere(user_interest).lower()
+    # print(user_interest)
+    # print(variante_fara_primul_cuvant)
+    print(user_interest)
+    prompt = (
+        f"Verifică dacă utilizatorul a ales exact una dintre opțiunile complete oferite.\n\n"
+        f"Opțiuni disponibile:\n{', '.join(variante_fara_primul_cuvant)}\n\n"
+        f"Utilizatorul a spus: '{user_interest}'\n\n"
+        "Consideră că potrivirea trebuie să fie completă și exactă, însă ignoră diferențele de majuscule și spații la început/sfârșit.\n"
+        "Dacă răspunsul este doar o parte din opțiune (de exemplu, 'china' când există 'China 0.3'), răspunde NU.\n"
+        "Răspunde cu un singur cuvânt:\n"
+        "- DA – dacă răspunsul este fix și complet, exact una dintre opțiuni.\n"
+        "- NU – dacă este incomplet, parțial sau diferit.\n\n"
+        "Nu oferi explicații, doar DA sau NU."
+    )
+
+
+    messages = [{"role": "system", "content": prompt}]
+    response = ask_with_ai(messages).strip().upper()
+    return response
+
+
+@app.route("/welcome", methods=["POST"])
+def welcome():
+    global counter
+    data = request.json
+    name = data.get("name", "")
+    interests = data.get("interests", "")
+
+    print("interests = " , interests)
+    categoria_aleasa = check_and_get_category(interests, categorii_unice)
+    print(categorii_unice)
+
+    print("categoria_aleasa = " , categoria_aleasa)
+
+    if categoria_aleasa == "NU":
+        prompt = (
+            f"Utilizatorul a scris categoria: '{interests}'.\n\n"
+            "Nu spune niciodată „Salut”, gen toate chestiile introductive, pentru că noi deja ducem o discuție și ne cunoaștem. "
+            "Scrie un mesaj politicos, prietenos și natural, care:\n"
+            "1. Răspunde pe scurt la ceea ce a spus utilizatorul . "
+            "2. Apoi roagă-l politicos să rescrie cu atenție denumirea categoriei dorite, "
+            "pentru a-l putea ajuta cât mai bine.\n"
+            "3. Mesajul să fie scurt, cald, empatic și prietenos. "
+            "Nu mai mult de 2-3 propoziții.\n"
+            "Nu folosi ghilimele și nu explica ce faci – scrie doar mesajul final pentru utilizator."
+        )
+        messages = [{"role": "system", "content": prompt}]
+        mesaj = ask_with_ai(messages).strip()
+        mesaj += "!!!"
+
+    elif categoria_aleasa == "comandă":
+        mesaj = "🌟 Mulțumim că ai ales KROV! Pentru a putea procesa comanda ta cât mai rapid, te rugăm frumos să ne spui numele și prenumele tău. 😊"
+        return jsonify({"message": mesaj})
+    else:
+        search_key = " ".join(categoria_aleasa.split()[:2]).lower()
+        sub_variante = [cat for cat in categorii_unice if search_key in cat.lower()]
+        variante_fara_primul_cuvant = [' '.join(v.split()[1:]) for v in sub_variante]
+        print("sub_variante = ", sub_variante)
+        check_sub_variante = check_variante(interests , sub_variante)
+
+        print("check_sub_variante = " , check_sub_variante)
+
+        if(check_sub_variante == "NU"):
+            if len(sub_variante) > 1:
+                emoji_options = ["🔹", "🔸", "▪️", "▫️", "◾", "◽"]  # Emoji-uri neutre pentru variante
+                options_list = "\n".join([f"{emoji_options[i%len(emoji_options)]} {variant}" for i, variant in enumerate(variante_fara_primul_cuvant)])
+                
+                mesaj = (
+                    f"Am găsit mai multe variante pentru '{categoria_aleasa.split()[1]}':\n\n"
+                    f"{options_list}\n\n"
+                    "Te rog să alegi varianta exactă care te interesează. 😊"
+                )
+            else:
+                preferinte["Categorie"] = categoria_aleasa
+                request_categorie = categoria_preferata(categoria_aleasa)
+                preferinte["Produsele"] = request_categorie
+                mesaj = request_categorie
+                # mesaj += " . <br><br> Care produs te intereseaza ? "
+                mesaj += " . <br><br> Doriti sa aflati informatie si despre alte categorii sau doriti sa comandati ? "
+
+        
+        else:
+            preferinte["Categorie"] = categoria_aleasa
+            request_categorie = categoria_preferata(categoria_aleasa)
+            preferinte["Produsele"] = request_categorie
+            mesaj = request_categorie
+            # mesaj += " . <br><br> Care produs te intereseaza ? "
+            mesaj += " . <br><br> Doriti sa aflati informatie si despre alte categorii sau doriti sa comandati ? "
+
+
+    return jsonify({"message": mesaj})
+
+def check_response(user_message):
+    prompt = (
+        f"Utilizatorul a spus: '{user_message}'\n\n"
+        "Clasifică mesajul utilizatorului într-una dintre următoarele categorii, răspunzând cu un singur cuvânt:\n\n"
+        "- DA: dacă mesajul exprimă o intenție clară și pozitivă, cum ar fi o confirmare, o dorință de a merge mai departe sau un interes real. "
+        "Exemple: 'Da', 'Sigur', 'Aș dori', 'Sunt interesat', 'Vreau acel produs', 'Desigur', 'Perfect', 'sunt curios' etc.\n\n"
+        "- NU: dacă mesajul exprimă o refuzare, o ezitare sau o lipsă de interes. "
+        "Exemple: 'Nu', 'Nu acum', 'Nu sunt sigur', 'Mai târziu', etc.\n\n"
+        "- ALTCEVA: dacă mesajul nu se încadrează în niciuna dintre categoriile de mai sus, de exemplu dacă utilizatorul pune o întrebare nespecifică, schimbă subiectul sau oferă informații fără legătură cu decizia, comanda sau interesul față de produs. "
+    )
+    messages = [{"role": "system", "content": prompt}]
+    result = ask_with_ai(messages).strip().upper()
+    return result
+
+
+def construieste_prompt_selectie(produse_similare):
+    if not produse_similare:
+        return "⚠️ Nu există produse similare pentru a selecta."
+
+    prompt = (
+        "🔍 Am găsit mai multe produse care se potrivesc cu ce ai scris.\n"
+        "👇 Te rog alege unul dintre produsele de mai jos:<br>\n\n"
+    )
+
+    for i, produs in enumerate(produse_similare, start=1):
+        prompt += f"{i}. 🛒 {produs}<br>\n"
+
+    prompt += "\n Scrie **numele exact** al produsului dorit"
+    return prompt
+
+
+def check_product(message):
+    lista_produse = preferinte.get("Produsele", [])
+    prompt = (
+        "Primești o listă de produse și un mesaj venit de la client.\n"
+        "Scopul tău este să identifici dacă mesajul clientului se referă clar la unul dintre produsele din listă, la mai multe produse, sau deloc.\n\n"
+        "Instrucțiuni:\n"
+        "- Dacă mesajul se potrivește clar CU UN SINGUR produs din lista normalizată, răspunde DOAR cu numele acelui produs, exact așa cum apare în listă.\n"
+        "- Dacă mesajul se potrivește parțial sau ambiguu CU MAI MULTE produse din listă, răspunde cu: AMBIGUU: urmat de lista produselor potrivite separate prin virgulă (ex: AMBIGUU: Produs A, Produs B).\n"
+        "- Dacă mesajul NU pare să se refere deloc la vreun produs din listă, sau conținutul este complet diferit (ex: întrebări generale, comentarii care nu au legătură cu produse), răspunde cu: NONE\n\n"
+        f"Lista de produse disponibile: {', '.join(lista_produse)}\n"
+        f"Mesaj client: \"{message.strip()}\"\n"
+        "Răspuns:"
+    )
+
+    messages = [{"role": "system", "content": prompt}]
+    response = ask_with_ai(messages).strip()
+
+    if response.upper() == "NONE":
+        return "NONE", []
+    
+    if response.upper().startswith("AMBIGUU"):
+        _, sugestii = response.split(":", 1)
+        print(sugestii)
+        produse_similare = [p.strip() for p in sugestii.split(",")]
+        produse_similare = construieste_prompt_selectie(produse_similare)
+        return "AMBIGUU", produse_similare
+
+    return response, []
+
+
+def check_category(user_interest, categorii_unice):
+    prompt = (
+        "Având în vedere lista de categorii:\n"
+        f"{', '.join(categorii_unice)}\n"
+        f"Utilizatorul a spus: '{user_interest}'\n"
+        "Uite daca utilizatorul a specificat clar produsul , de exemplu daca cere tabla cutata , am mai multe variante si nu este clar , insa daca specifica ce tabla cutata atunci este bine si asa pentru toate trebuie"
+        "Răspunde doar cu numele produsului daca este specificat bine , fără alte explicații. "
+        "Dacă niciuna nu se potrivește, răspunde cu NU."
+    )
+    messages = [{"role": "system", "content": prompt}]
+    response = ask_with_ai(messages).strip()
+
+    if not response or response.upper() == "NU":
+        return "NU"
+    
+    # Poți face o verificare suplimentară să vezi dacă răspunsul chiar face parte din categorii
+    if response not in categorii_unice:
+        return "NU"
+
+    return response
+
+
+@app.route("/next_chat", methods=["POST"])
+def next_chat():
+    data = request.get_json()
+    name = data.get("name", "")
+    interests = data.get("interests", "")
+    message = data.get("message", "")
+    response,lista = check_product(message)
+    print(response)
+    print(lista)
+    # response_name = check_category(interests,preferinte["Produsele"])
+    # if response_name == "NU":
+    if response == "AMBIGUU":
+
+        return jsonify({"reply": lista})
+
+    if response != "NONE" :
+        preferinte['produs_exact'] = response
+        response = (
+            "Îți mulțumesc! Te rog să-mi spui doar cantitatea dorită pentru produs, "
+            "ca să pot continua comanda ta.\n\n"
+            "Aștept cantitatea, mulțumesc! 😊"
+        )
+
+    else:
+        prompt = (
+            "Nu trebuie sa te saluti pentru ca deja ducem o conversatie , trebuie sa raspunzi strict la mesaje ! "
+            "Esti un chatbot inteligent care raspunde la intrebari intr-o maniera foarte prietenoasa ."
+            "Esti chatbot-ul companiei KROV care se ocupa de acoperisuri . "
+            f"Raspunde la mesajul {message} si adauga la final ca nu ai inteles ce produs si roaga userul sa mai aleaga odata produsul cu atentie . ( sa scrie fara greseli ) "
+        )
+
+        messages = [{"role": "system", "content": prompt}]
+        response = ask_with_ai(messages)
+        response += "!!!"
+
+    return jsonify({"reply": response})
+    
+
+def este_cantitate_valida(message):
+    
+    prompt = (
+        "Clientul a trimis un mesaj. Extrage, te rog,  cantitatea numerică exprimată în orice formă. "
+        "Răspunde DOAR cu numărul, fără alte cuvinte.\n\n"
+        f"Mesaj: \"{message}\"\n"
+        "Răspuns:"
+    )
+
+    messages = [{"role": "system", "content": prompt}]
+    response = ask_with_ai(messages)
+    return response
+
+
+def check_price(produs_exact):
+    lista_produse = preferinte.get("Produsele", [])
+    print("list_produse = ", lista_produse)
+    print("produsul exact : " , produs_exact)
+    prompt = (
+        f"Extrage te rog din lista de produse {lista_produse} produsul {produs_exact} , trebuie sa imi extragi fix produsul {produs_exact} si doar pe acesta nu alta informatie te rog!!!"
+    )
+    messages = [{"role": "system", "content": prompt}]
+    response = ask_with_ai(messages)
+    return response
+
+
+def extrage_total_din_text(text):
+    numere = re.findall(r"(?<![a-zA-Z])(\d+(?:[.,]\d+)?)", text)
+    if numere:
+        return float(numere[-1].replace(",", "."))
+    return None
+
+
+def print_price(pret_produs, cantitate, produsul_extras):
+    total = float(pret_produs) * float(cantitate)
+    return (
+        f"Preț unitar: {pret_produs:.2f} MDL\n"
+        f"Preț total: {total:.2f} MDL\n"
+        "Dacă doriți să comandați sau aveți alte întrebări, nu ezitați să mă întrebați."
+    )
+
+@app.route("/cantitate", methods=["POST"])
+def cantitate():
+    data = request.get_json()
+    name = data.get("name", "")
+    interests = data.get("interests", "")
+    message = data.get("message", "")
+    cantitate = este_cantitate_valida(message)
+    produs_exact = preferinte['produs_exact']
+    produsul_extras = check_price(produs_exact)
+    print("Produsul extras : " , produsul_extras)
+    pret_produs = extrage_total_din_text(produsul_extras)
+    print(pret_produs)
+    print_frumos = print_price(pret_produs,cantitate,produsul_extras)
+    # print(print_frumos)
+    return jsonify({"reply": print_frumos})
+
+@app.route("/chat", methods=["POST"])
+def chat():
+    data = request.get_json()
+    name = data.get("name", "")
+    interests = data.get("interests", "")
+    message = data.get("message", "")
+    response = check_response(message)
+    print("raspuns = " , response)
+    if response == "DA":
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Nu spune niciodată „Salut”, gen toate chestiile introductive, pentru că noi deja ducem o discuție și ne cunoaștem. "
+                    "Fa promptul frumos , foloseste emoji-uri ( este despre un business de acoperisuri ) si pentur fiecare alegere adauga un emoji in loc de numere dar trebuie ca emojiurile sa fie strict legate de business de acoperisuri ( gen cand enumeri categoriile )"
+                    "Esti un chatbot inteligent care creezi un prompt interactiv si frumos pentru user si il intrebi ce produse doreste , din cele de mai jos (trebuie incluse toate in prompt fara RoofArt in fata):"
+                    f"Acestea sunt toate categoriile disponibile : {categorii_unice} , afiseaza-le pe toate"
+                    "Afiseaza toate categoriile diponibile , nu scapa niciunu"
+                    "Rogi userul sa raspunda cu denumirea exacta a produsului"
+                )
+            }
+        ]
+
+    elif response == "NU":
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Îți mulțumesc pentru conversație! 🙏 Dacă vei avea întrebări sau vei dori să afli mai multe despre produsele noastre, "
+                    "sunt aici oricând pentru tine. 🏠💬\n"
+                    "Îți doresc o zi frumoasă și succes în proiectul tău de acoperiș! ☀️🔨"
+                )
+            }
+        ]
+        messages[0]['content'] += "!!!"
+    else:
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    f"Utilizatorul a scris categoria: '{interests}'.\n\n"
+                    "Nu spune niciodată „Salut”, gen toate chestiile introductive, pentru că noi deja ducem o discuție și ne cunoaștem. "
+                    "Scrie un mesaj politicos, prietenos și natural, care:\n"
+                    "1. Răspunde pe scurt la ceea ce a spus utilizatorul . "
+                    "2. Apoi roagă-l politicos să raspunda daca doreste sa afle despre alt produs cu Da/Nu . "
+                )
+            }
+        ]
+
+
+    reply = ask_with_ai(messages, temperature=0.9 , max_tokens= 400)
+
+    # reply = response.choices[0].message.content.strip()
+    # log_message("AI BOT", reply)
+    return jsonify({"reply": reply})
+
+
+@app.route("/comanda", methods=["POST"])
+def comanda():
+    data = request.get_json()
+    name = data.get("name", "")
+    interests = data.get("interests", "")
+    message = data.get("message", "")
+    print("1111")
+
+    return jsonify({"reply": message})
+
+
+def ask_with_ai(messages , temperature = 0.9 , max_tokens = 100):
+    response = openai.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens
+    )
+    return response.choices[0].message.content.strip()
+
+
+
+
+
+
+if __name__ == "__main__":
+    app.run(debug=True, use_reloader=False)
