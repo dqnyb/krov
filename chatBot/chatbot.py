@@ -970,30 +970,14 @@ def check_price(produs_exact):
     return response
 
 
-def extrage_total_din_text(text):
-    try:
-        # Încearcă să extragi partea de după ":"
-        parti = text.split(":")
-        if len(parti) > 1:
-            text_parte = parti[1]
-        else:
-            text_parte = text
-        print("aceasta e partea = ", text_parte)
 
-        # Caută număr în partea respectivă
-        numere = re.findall(r"(?<![a-zA-Z])(\d+(?:[.,]\d+)?)", text_parte)
-        if numere:
-            return float(numere[0].replace(",", "."))
-        
-        # Dacă nu a găsit în partea după ":", încearcă din tot textul
-        numere_totale = re.findall(r"(?<![a-zA-Z])(\d+(?:[.,]\d+)?)", text)
-        if numere_totale:
-            return float(numere_totale[0].replace(",", "."))
-        
-    except Exception as e:
-        print("Eroare la extragere preț:", e)
-    
-    return 100
+def extrage_total_din_text(text):
+    # Caută primul număr, cu punct sau virgulă
+    numere = re.findall(r"\d+(?:[.,]\d+)?", text)
+    if numere:
+        return float(numere[0].replace(",", "."))
+    return None
+
 
 
 def print_price(pret_produs, cantitate, produsul_extras, culoare_aleasa, masurare, language):
@@ -1756,6 +1740,8 @@ def produs():
 
     if length_check == 1 :
         preferinte["Produs_Ales"] = rezultat[0]["produs"]
+        preferinte["Pret_Produs"] = rezultat[0]["pret"]
+
         if culori:
             if language_saved == "RO":
                 return jsonify({
@@ -2146,7 +2132,7 @@ def cantitate():
             masurare = "foi"
 
     print("Produsul extras : " , produsul_extras)
-    pret_produs = extrage_total_din_text(produsul_extras)
+    pret_produs = extrage_total_din_text(preferinte["Pret_Produs"])
     print("pret produs cantitate = ",pret_produs)
 
     nume_prenume_corect = extrage_nume_din_text(preferinte["Nume_Prenume"])
