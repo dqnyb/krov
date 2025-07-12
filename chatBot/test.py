@@ -16,7 +16,7 @@ load_dotenv()
 
 llm = ChatOpenAI(temperature=0.2, model="gpt-4o")
 
-df = pd.read_excel("p.xlsx")
+df = pd.read_excel("chatBot/p.xlsx")
 df.columns = df.columns.str.strip()
 df["Categorie"] = df["Categorie"].ffill()
 df = df[df["Nume"].notna() & df["Nume"].str.strip().ne("")]
