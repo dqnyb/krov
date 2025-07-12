@@ -16,7 +16,7 @@ load_dotenv()
 
 llm = ChatOpenAI(temperature=0.2, model="gpt-4o")
 
-df = pd.read_excel("chatBot/p.xlsx")
+df = pd.read_excel("p.xlsx")
 df.columns = df.columns.str.strip()
 df["Categorie"] = df["Categorie"].ffill()
 df = df[df["Nume"].notna() & df["Nume"].str.strip().ne("")]
@@ -164,7 +164,7 @@ def categoria_preferata(categoria):
     else:
         culori_formatate = "Culorile nu sunt specificate (poti alege orice culoare la urmatorul pas). <br><br>"
 
-    result_final = result['result'] + "<br><br>" + culori_formatate
+    result_final = result['result'] + "\n\n<br><br>" + culori_formatate
     return result_final
 
 # question = f"Vreau sa vad toate produsele din categoria china mat cu pretul din lista"

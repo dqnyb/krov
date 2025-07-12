@@ -42,8 +42,8 @@ client = OpenAI(
 
 preferinte = {}
 preferinte['interes_salvat'] = ""
-
-df = pd.read_excel('chatBot/p.xlsx')
+preferinte["Numar_Telefon"] = ""
+df = pd.read_excel('p.xlsx')
 categorii = df['Categorie']
 categorii_unice = list(dict.fromkeys(categorii.dropna().astype(str)))
 print("categorii unice = " , categorii_unice)
@@ -300,7 +300,7 @@ def interests():
         interest_checked = check_interest_rus(interest)
     
     print(interest_checked)
-
+    preferinte["Numar_Telefon"] = ""
 
     if (interest_checked == "produs_informații"):
         if language_saved == "RO":
@@ -811,6 +811,22 @@ def welcome():
     # print(preferinte["Produsele"])
     return jsonify({"message": mesaj})
 
+
+
+def check_response_comanda(user_message):
+    prompt = (
+        f"Utilizatorul a spus: '{user_message}'\n\n"
+        "Clasifică mesajul utilizatorului într-una dintre următoarele categorii, răspunzând cu un singur cuvânt:\n\n"
+        "- DA: dacă mesajul exprimă o intenție clară și pozitivă, cum ar fi o confirmare, o dorință de a merge mai departe, un interes real sau dacă utilizatorul afirmă că a mai comandat de la noi, chiar dacă nu spune explicit că dorește din nou. "
+        "Exemple: 'Da', 'Sigur', 'Aș dori', 'Sunt interesat', 'Vreau acel produs', 'Desigur', 'Perfect', 'sunt curios', 'am mai avut comandă', 'am mai comandat de la voi', etc.\n\n"
+        "- NU: dacă mesajul exprimă o refuzare, o ezitare sau o lipsă de interes. "
+        "Exemple: 'Nu', 'Nu acum', 'Nu sunt sigur', 'Mai târziu', etc.\n\n"
+        "- ALTCEVA: dacă mesajul nu se încadrează în niciuna dintre categoriile de mai sus, de exemplu dacă utilizatorul pune o întrebare nespecifică, schimbă subiectul sau oferă informații fără legătură cu decizia, comanda sau interesul față de produs.\n\n"
+    )
+    messages = [{"role": "system", "content": prompt}]
+    result = ask_with_ai(messages).strip().upper()
+    return result
+
 def check_response(user_message):
     prompt = (
         f"Utilizatorul a spus: '{user_message}'\n\n"
@@ -974,9 +990,26 @@ def check_price(produs_exact):
 def extrage_total_din_text(text):
     # Caută primul număr, cu punct sau virgulă
     numere = re.findall(r"\d+(?:[.,]\d+)?", text)
+    print(numere)
     if numere:
         return float(numere[0].replace(",", "."))
-    return None
+    return 200
+
+
+def cantitate_afiseaza(pret_produs, cantitate, language):
+    total = float(pret_produs) * float(cantitate)
+    categorie = preferinte["Categorie"]
+
+    if language == "RO":
+        return (
+            f"🧮 <strong>Preț total:</strong> <strong>{total:.2f} MDL</strong><br><br>"
+            "❓ Dorești să <strong>finalizezi comanda</strong>? <strong>DA</strong> / <strong>NU</strong> 😊"
+        )
+    else:
+        return (
+            f"🧮 <strong>Общая стоимость:</strong> <strong>{total:.2f} MDL</strong><br><br>"
+            "❓ Хотите <strong>завершить заказ</strong>? <strong>ДА</strong> / <strong>НЕТ</strong> 😊"
+        )
 
 
 
@@ -1284,18 +1317,64 @@ def comanda():
 
     if check_sur == "DA":
         preferinte["Nume_Prenume"] = message
+        # if language_saved == "RO":
+        #     reply = (
+        #         "😊 Mulțumim! Ai un nume frumos! 💬<br>"
+        #         "Ne-ai putea lăsa și un număr de telefon pentru a te putea contacta? 📞<br>"
+        #         "Te rugăm să te asiguri că numărul începe cu <strong>0</strong> sau <strong>+373</strong>. ✅"
+        #     )
+        # else:
+        #     reply = (
+        #         "😊 Спасибо! У тебя красивое имя! 💬<br>"
+        #         "Не мог бы ты также оставить свой номер телефона, чтобы мы могли с тобой связаться? 📞<br>"
+        #         "Пожалуйста, убедись, что номер начинается с <strong>0</strong> или <strong>+373</strong>. ✅"
+        #     )
+
         if language_saved == "RO":
-            reply = (
-                "😊 Mulțumim! Ai un nume frumos! 💬<br>"
-                "Ne-ai putea lăsa și un număr de telefon pentru a te putea contacta? 📞<br>"
-                "Te rugăm să te asiguri că numărul începe cu <strong>0</strong> sau <strong>+373</strong>. ✅"
-            )
-        else:
-            reply = (
-                "😊 Спасибо! У тебя красивое имя! 💬<br>"
-                "Не мог бы ты также оставить свой номер телефона, чтобы мы могли с тобой связаться? 📞<br>"
-                "Пожалуйста, убедись, что номер начинается с <strong>0</strong> или <strong>+373</strong>. ✅"
-            )
+            messages = [
+                {
+                    "role": "user",
+                    "content": (
+                        "Nu spune niciodată „Salut”, gen toate chestiile introductive, pentru că noi deja ducem o discuție și ne cunoaștem. "
+                        "Fa promptul frumos , nu foloseste emoji-uri deloc ( este despre un business de acoperisuri ) , scrie categoriile in '' , gen 'china' , fara '-' in fata"
+                        "Esti un chatbot inteligent care creezi un prompt interactiv si frumos pentru user si il intrebi ce produse doreste , din cele de mai jos (trebuie incluse toate in prompt fara RoofArt in fata):"
+                        f"Acestea sunt toate categoriile disponibile : {categorii_unice}"
+                        "Rogi userul sa raspunda cu denumirea exacta a produsului din lista de categorii"
+                    )
+                }
+            ]
+        elif language_saved == "RU":
+            messages = [
+                {
+                    "role": "user",
+                    "content": (
+                        "Никогда не говори «Привет», никаких вступительных фраз, потому что мы уже ведём разговор и знаем друг друга. "
+                        "Сделай подсказку красивой, не используй вообще никаких эмодзи (это про крышный бизнес), пиши категории в '' кавычках, например 'china', без дефиса перед ними. "
+                        "Ты — умный чатбот, который создаёт интерактивную и красивую подсказку для пользователя и спрашивает, какие продукты он хочет из следующих (все должны быть включены в подсказку без RoofArt перед ними): "
+                        f"Это все доступные категории: {categorii_unice} "
+                        "Попроси пользователя ответить точным названием продукта из списка категорий."
+                    )
+                }
+            ]
+        
+        message = "😊 Mulțumim! Ai un nume frumos! 💬<br><br>"
+
+        reply = ask_with_ai(messages, temperature=0.9 , max_tokens= 400)
+
+        pos = reply.rfind("'")
+        if pos != -1:
+            reply = reply[:pos+1] + "<br><br>" + reply[pos+1:]
+
+        pos = reply.rfind(":")
+        if pos != -1:
+            reply = reply[:pos+1] + "<br>" + reply[pos+1:]
+
+        reply = format_product_mentions(reply)
+        reply = clean_punct_except_numbers(reply)
+        message += reply
+        reply = message
+
+        return jsonify({"reply": reply}) 
 
     else:
         if language_saved == "RO":
@@ -1366,6 +1445,7 @@ def check_numar(message):
     return response
     
 
+
 @app.route("/numar_de_telefon", methods=["POST"])
 def numar_de_telefon():
     data = request.get_json()
@@ -1426,46 +1506,130 @@ def numar_de_telefon():
 
 
     else:
-        preferinte["Numar_Telefon"] = message
+        preferinte["Numar_Telefon"] = nr
         if language_saved == "RO":
-            messages = [
-                {
-                    "role": "user",
-                    "content": (
-                        "Nu spune niciodată „Salut”, gen toate chestiile introductive, pentru că noi deja ducem o discuție și ne cunoaștem. "
-                        "Fa promptul frumos , nu foloseste emoji-uri deloc ( este despre un business de acoperisuri ) , scrie categoriile in '' , gen 'china' , fara '-' in fata"
-                        "Esti un chatbot inteligent care creezi un prompt interactiv si frumos pentru user si il intrebi ce produse doreste , din cele de mai jos (trebuie incluse toate in prompt fara RoofArt in fata):"
-                        f"Acestea sunt toate categoriile disponibile : {categorii_unice}"
-                        "Rogi userul sa raspunda cu denumirea exacta a produsului din lista de categorii"
-                    )
-                }
-            ]
+            reply = (
+                "Te rog să-mi spui <strong>cantitatea dorită</strong> pentru produsul ales, astfel încât să putem continua cu procesarea comenzii tale.<br><br>"
+                "Îți mulțumim anticipat pentru <strong>răbdare</strong> și <strong>colaborare</strong>. "
+            )
+
         elif language_saved == "RU":
-            messages = [
-                {
-                    "role": "user",
-                    "content": (
-                        "Никогда не говори «Привет», никаких вступительных фраз, потому что мы уже ведём разговор и знаем друг друга. "
-                        "Сделай подсказку красивой, не используй вообще никаких эмодзи (это про крышный бизнес), пиши категории в '' кавычках, например 'china', без дефиса перед ними. "
-                        "Ты — умный чатбот, который создаёт интерактивную и красивую подсказку для пользователя и спрашивает, какие продукты он хочет из следующих (все должны быть включены в подсказку без RoofArt перед ними): "
-                        f"Это все доступные категории: {categorii_unice} "
-                        "Попроси пользователя ответить точным названием продукта из списка категорий."
-                    )
-                }
-            ]
+            reply = (
+                "Пожалуйста, укажи <strong>желаемое количество</strong> выбранного товара, чтобы мы могли продолжить обработку твоего заказа.<br><br>"
+                "Заранее благодарим за <strong>терпение</strong> и <strong>сотрудничество</strong>. "
+            )
 
-        reply = ask_with_ai(messages, temperature=0.9 , max_tokens= 400)
+    return jsonify({"reply": reply})
 
-        pos = reply.rfind("'")
-        if pos != -1:
-            reply = reply[:pos+1] + "<br><br>" + reply[pos+1:]
 
-        pos = reply.rfind(":")
-        if pos != -1:
-            reply = reply[:pos+1] + "<br>" + reply[pos+1:]
 
-        reply = format_product_mentions(reply)
-        reply = clean_punct_except_numbers(reply)
+@app.route("/numar_de_telefon_final", methods=["POST"])
+def numar_de_telefon_final():
+    data = request.get_json()
+    name = data.get("name", "")
+    interests = data.get("interests", "")
+    message = data.get("message", "")
+    language_saved = data.get("language", "")
+
+    print("message = ", message)
+    valid = check_numar(message)
+
+    print("valid = " , valid)
+    if valid == "NU":
+        if language_saved == "RO":
+            prompt = (
+                "Nu te saluta pentru ca deja avem o discutie.\n"
+                "Acționează ca un asistent prietenos și politicos.\n"
+                "Răspunde natural și cald la mesajul clientului.\n"
+                f"Mesaj client: \"{message}\"\n\n"
+                "Răspuns:"
+            )
+        else:
+            prompt = (
+                "Не приветствуй, так как у нас уже идет разговор.\n"
+                "Веди себя как дружелюбный и вежливый помощник.\n"
+                "Отвечай естественно и тепло на сообщение клиента.\n"
+                f"Сообщение клиента: \"{message}\"\n\n"
+                "Ответ:"
+            )
+
+
+        messages = [{"role": "system", "content": prompt}]
+        ai_reply = ask_with_ai(messages, max_tokens=150)
+        if language_saved == "RO":
+            ai_reply += "<br><br> 🙏 Te rog să introduci un număr de telefon valid pentru a putea continua. 📞"
+        else:
+            ai_reply += "<br><br> 🙏 Пожалуйста, введи действительный номер телефона, чтобы мы могли продолжить. 📞"
+
+
+        return jsonify({"reply": ai_reply})
+
+    print(message)
+    nr, status = extrage_si_valideaza_numar(message)
+    print(f"valid = {status}")
+
+
+    if status != "VALID":
+        if language_saved == "RO":
+            reply = (
+                "🚫 Numărul acesta nu pare corect.\n"
+                "Te rog să introduci un număr valid care începe cu `0` sau `+373`. 📞"
+            )
+        else:
+            reply = (
+                "🚫 Этот номер кажется некорректным.\n"
+                "Пожалуйста, введи действительный номер, начинающийся с `0` или `+373`. 📞"
+            )
+
+
+    else:
+        preferinte["Numar_Telefon"] = nr
+        produs_exact = preferinte["Produs_Ales"]
+        produsul_extras = check_price(produs_exact)
+        if language_saved == "RO":
+            if "m2" in produsul_extras:
+                masurare = "m2"
+            elif "ml" in produsul_extras:
+                masurare = "ml"
+            elif "foaie" in produsul_extras:
+                masurare = "foi"
+        else:
+            if "м2" in produsul_extras:
+                masurare = "m2"
+            elif "мл" in produsul_extras:
+                masurare = "мл"
+            elif "лист" in produsul_extras or "бумаг" in produsul_extras:
+                masurare = "foi"
+
+
+        pret_produs = preferinte["Pret_Produs_Extras"]
+
+        nume_prenume_corect = preferinte["Nume_Prenume"]
+
+        total = preferinte["Pret_Total"]
+
+        cantitate = preferinte["Cantitate"]
+
+        mesaj_telegram = (
+            f"👤 Nume Prenume: {nume_prenume_corect} \n"
+            f"📞 Numar de telefon: {preferinte['Numar_Telefon']} \n"
+            f"📦 Categoria: {preferinte['Categorie']} \n"
+            f"📦 Produs: {produs_exact} \n"
+            f"🎨 Culoare aleasă: {preferinte['Culoare_Aleasa']} \n"
+            f"💲 Preț unitar: {pret_produs:.2f} MDL \n"
+            f"📐 Cantitate: {cantitate} {masurare} \n"
+            f"🧮 Preț total: {total:.2f} MDL \n"
+        )
+
+        mesaj_encodat = urllib.parse.quote(mesaj_telegram)
+
+        url = f"https://api.telegram.org/bot{TELEGRAM}/sendMessage?chat_id={CHAT_ID}&text={mesaj_encodat}"
+        response = requests.get(url)
+
+        print_frumos = print_price(pret_produs,cantitate,produs_exact,preferinte["Culoare_Aleasa"], masurare, language_saved)
+
+        return jsonify({"reply": print_frumos})
+
 
     return jsonify({"reply": reply})
 
@@ -1599,15 +1763,18 @@ def categorie():
         mesaj = ask_with_ai(messages).strip()
         if language_saved == "RO":
             mesaj += (
-                "<br><br>🏠🔨 Suntem gata să te ajutăm cu tot ce ține de acoperișuri! "
-                "Te rog să alegi clar dacă dorești să afli detalii despre un <em>produs</em> sau vrei să plasezi o <em>comandă</em>. "
-                "😊🛠️"
+                "<br><br>🏠🔨 Suntem gata să te ajutăm cu tot ce ține de acoperișuri!<br><br>"
+                "Te rugăm să alegi una dintre <strong>categoriile de mai sus</strong> pentru a afla mai multe detalii</strong>.<br><br>"
+                "📦 Scrie exact denumirea categoriei care te interesează. 😊"
             )
+
         else:
             mesaj += (
-                "<br><br>🏠🔨 Мы готовы помочь вам со всем, что связано с крышами! "
-                 "📋 Напишите <strong>точное название категории</strong> из списка, чтобы мы могли перейти к следующему шагу. 🔽"
+                "<br><br>🏠🔨 Мы готовы помочь вам со всем, что связано с крышами!<br>"
+                "Пожалуйста, выбери одну из <strong>вариантов выше</strong>, чтобы узнать подробности.<br>"
+                "📦 Напиши точное название интересующей тебя категории. 😊"
             )
+
         preferinte['interes_salvat'] = ""
     else:
         search_key = categoria_aleasa.split()[0].lower()
@@ -1741,7 +1908,7 @@ def produs():
     if length_check == 1 :
         preferinte["Produs_Ales"] = rezultat[0]["produs"]
         preferinte["Pret_Produs"] = rezultat[0]["pret"]
-
+        print(preferinte["Pret_Produs"])
         if culori:
             if language_saved == "RO":
                 return jsonify({
@@ -1980,15 +2147,17 @@ def culoare():
             if language_saved == "RO":
                 reply = (
                     f"🖌️ Culoarea a fost înregistrată cu succes! ✅<br><br>"
-                    "📦 Te rog acum să îmi spui <strong>cantitatea dorită</strong> pentru acest produs, în metri pătrați sau metri liniari – cum preferi tu. 📐🧮<br>"
-                    "💬 Aștept mesajul tău pentru a putea continua comanda. 😊"
+                    "📦 Pentru a te putea ajuta cât mai bine, spune-mi te rog dacă <strong>ai mai avut comenzi la noi</strong> înainte.<br><br>"
+                    "💬 Te rog să răspunzi cu <strong>DA</strong> sau <strong>NU</strong>, ca să putem continua comanda."
                 )
+
             else:
                 reply = (
-                    f"🖌️ Цвет успешно зарегистрирован! ✅<br><br>"
-                    "📦 Пожалуйста, теперь укажи <strong>желаемое количество</strong> для этого товара в квадратных метрах или погонных метрах — как тебе удобнее. 📐🧮<br>"
-                    "💬 Жду твоё сообщение, чтобы продолжить заказ. 😊"
+                    "🖌️ Цвет был успешно зарегистрирован! ✅<br><br>"
+                    "📦 Чтобы мы могли помочь тебе как можно лучше, пожалуйста, скажи, <strong>делал(а) ли ты у нас заказы ранее</strong>.<br><br>"
+                    "💬 Пожалуйста, ответь <strong>ДА</strong> или <strong>НЕТ</strong>, чтобы мы могли продолжить оформление заказа."
                 )
+
 
             return jsonify({"reply": reply})
     else:
@@ -2040,15 +2209,17 @@ def culoare():
             if language_saved == "RO":
                 reply = (
                     f"🖌️ Culoarea a fost înregistrată cu succes! ✅<br><br>"
-                    "📦 Te rog acum să îmi spui <strong>cantitatea dorită</strong> pentru acest produs, în metri pătrați , metri liniari sau foaie – cum preferi tu. 📐🧮<br>"
-                    "💬 Aștept mesajul tău pentru a putea continua comanda. 😊"
+                    "📦 Pentru a te putea ajuta cât mai bine, spune-mi te rog dacă <strong>ai mai avut comenzi la noi</strong> înainte.<br><br>"
+                    "💬 Te rog să răspunzi cu <strong>DA</strong> sau <strong>NU</strong>, ca să putem continua comanda."
                 )
+
             else:
                 reply = (
-                    f"🖌️ Цвет успешно зарегистрирован! ✅<br><br>"
-                    "📦 Пожалуйста, теперь укажи <strong>желаемое количество</strong> для этого товара в квадратных метрах или погонных метрах — как тебе удобнее. 📐🧮<br>"
-                    "💬 Жду твоё сообщение, чтобы продолжить заказ. 😊"
+                    "🖌️ Цвет был успешно зарегистрирован! ✅<br><br>"
+                    "📦 Чтобы мы могли помочь тебе как можно лучше, пожалуйста, скажи, <strong>делал(а) ли ты у нас заказы ранее</strong>.<br><br>"
+                    "💬 Пожалуйста, ответь <strong>ДА</strong> или <strong>НЕТ</strong>, чтобы мы могли продолжить оформление заказа."
                 )
+
 
             return jsonify({"reply": reply})
 
@@ -2066,6 +2237,145 @@ def extrage_nume_din_text(text):
 
     return response
 
+
+
+@app.route("/ai_mai_comandat", methods=["POST"])
+def ai_mai_comandat():
+    masurare = ""
+    data = request.get_json()
+    name = data.get("name", "")
+    interests = data.get("interests", "")
+    message = data.get("message", "")
+    language_saved = data.get("language","")
+
+    response = check_response_comanda(message)
+    preferinte["Response_Comanda"] = response
+    print(response)
+    
+    if response == "DA":
+        if language_saved == "RO":
+            reply = (
+                "🎉 Ne bucurăm enorm să aflăm că <strong>ai mai comandat de la noi</strong> – îți mulțumim pentru încredere și loialitate! 💚<br><br>"
+                "📞 Ne-ai putea lăsa, te rog, și un <strong>număr de telefon</strong> pentru a putea confirma că <strong>ești într-adevăr clientul nostru</strong>? 😊<br>"
+                "Te rugăm să te asiguri că numărul începe cu <strong>0</strong> sau <strong>+373</strong>. ✅"
+            )
+        else:
+            reply = (
+                "🎉 Мы очень рады узнать, что вы <strong>уже заказывали у нас ранее</strong> – спасибо за ваше доверие и преданность! 💚<br><br>"
+                "📞 Пожалуйста, оставьте нам <strong>номер телефона</strong>, чтобы мы могли подтвердить, что вы <strong>действительно наш клиент</strong>. 😊<br>"
+                "Просим убедиться, что номер начинается с <strong>0</strong> или <strong>+373</strong>. ✅"
+            )
+    elif response == "NU":
+        if language_saved == "RO":
+            reply = (
+                "😊 <strong>Nu este nicio problemă, fiecare început este important</strong> și suntem aici să te ajutăm pas cu pas!<br><br>"
+                "Te rog să-mi spui <strong>cantitatea dorită</strong> pentru produsul ales, astfel încât să putem continua cu comanda ta. 📐<br><br>"
+            )
+        else:
+            reply = (
+                "😊 <strong>Нет проблем, каждое начало важно</strong>, и мы здесь, чтобы помочь вам на каждом шагу!<br><br>"
+                "Пожалуйста, укажите <strong>желаемое количество</strong> выбранного товара, чтобы мы могли продолжить ваш заказ. 📐<br><br>"
+            )
+    else:
+        if language_saved == "RO":
+            reply = (
+                "Nu spune niciodată „Salut”, gen toate chestiile introductive, pentru că noi deja ducem o discuție și ne cunoaștem. "
+                "Scrie un mesaj politicos, prietenos și natural, care:<br>"
+                f"Răspunde pe scurt la ceea ce a spus utilizatorul {interests}.<br>"
+                "Mesajul să fie scurt, cald, empatic și prietenos. "
+                "Nu mai mult de 2-3 propoziții.<br>"
+                "Nu folosi ghilimele și nu explica ce faci – scrie doar mesajul pentru utilizator.<br>"
+            )
+            messages = [{"role": "user", "content": reply}]
+            reply = ask_with_ai(messages)
+            reply += (
+                "<br>😊 <strong>Te rog să răspunzi clar dacă ai mai comandat la noi sau nu, "
+                "pentru a putea calcula corect prețul.</strong> 🙏"
+            )
+        else:
+            reply = (
+                "Никогда не говори «Привет», как будто это первое наше общение, ведь мы уже общаемся и знакомы. "
+                "Напиши вежливое, дружелюбное и естественное сообщение, которое:<br>"
+                f"Кратко отвечает на то, что сказал пользователь {interests}.<br>"
+                "Сообщение должно быть коротким, тёплым, эмпатичным и дружелюбным. "
+                "Не больше 2–3 предложений.<br>"
+                "Не используй кавычки и не объясняй, что делаешь — просто напиши сообщение для пользователя.<br>"
+            )
+            messages = [{"role": "user", "content": reply}]
+            reply = ask_with_ai(messages)
+            reply += (
+                "<br>😊 <strong>Пожалуйста, чётко укажи, заказывали ли вы у нас раньше, "
+                "чтобы мы могли правильно рассчитать цену.</strong> 🙏"
+            )
+
+    return jsonify({"reply": reply})
+
+
+@app.route("/final_stage", methods=["POST"])
+def final_stage():
+    masurare = ""
+    data = request.get_json()
+    name = data.get("name", "")
+    interests = data.get("interests", "")
+    message = data.get("message", "")
+    language_saved = data.get("language","")
+    print(message)
+
+
+
+    produs_exact = preferinte["Produs_Ales"]
+    produsul_extras = check_price(produs_exact)
+    if language_saved == "RO":
+        if "m2" in produsul_extras:
+            masurare = "m2"
+        elif "ml" in produsul_extras:
+            masurare = "ml"
+        elif "foaie" in produsul_extras:
+            masurare = "foi"
+    else:
+        if "м2" in produsul_extras:
+            masurare = "m2"
+        elif "мл" in produsul_extras:
+            masurare = "мл"
+        elif "лист" in produsul_extras or "бумаг" in produsul_extras:
+            masurare = "foi"
+
+    # print("Produsul extras : " , produsul_extras)
+    # pret_produs = extrage_total_din_text(preferinte["Pret_Produs"])
+    # print("pret produs cantitate = ",pret_produs)
+    pret_produs = preferinte["Pret_Produs_Extras"]
+
+    # nume_prenume_corect = extrage_nume_din_text(preferinte["Nume_Prenume"])
+    # preferinte["Nume_Prenume"] = nume_prenume_corect
+    nume_prenume_corect = preferinte["Nume_Prenume"]
+    # total = float(pret_produs) * float(cantitate)
+    total = preferinte["Pret_Total"]
+    # preferinte["Pret_Produs_Extras"] = pret_produs
+    # preferinte["Pret_Total"] = total
+    cantitate = preferinte["Cantitate"]
+
+    mesaj_telegram = (
+        f"👤 Nume Prenume: {nume_prenume_corect} \n"
+        f"📞 Numar de telefon: {preferinte['Numar_Telefon']} \n"
+        f"📦 Categoria: {preferinte['Categorie']} \n"
+        f"📦 Produs: {produs_exact} \n"
+        f"🎨 Culoare aleasă: {preferinte['Culoare_Aleasa']} \n"
+        f"💲 Preț unitar: {pret_produs:.2f} MDL \n"
+        f"📐 Cantitate: {cantitate} {masurare} \n"
+        f"🧮 Preț total: {total:.2f} MDL \n"
+    )
+
+    # Encode the message for the URL
+    mesaj_encodat = urllib.parse.quote(mesaj_telegram)
+
+    url = f"https://api.telegram.org/bot{TELEGRAM}/sendMessage?chat_id={CHAT_ID}&text={mesaj_encodat}"
+    response = requests.get(url)
+
+    # print_frumos = cantitate_afiseaza(pret_produs , cantitate , language_saved)
+    print_frumos = print_price(pret_produs,cantitate,produs_exact,preferinte["Culoare_Aleasa"], masurare, language_saved)
+
+    # print(print_frumos)
+    return jsonify({"reply": print_frumos})
 
 @app.route("/cantitate", methods=["POST"])
 def cantitate():
@@ -2116,6 +2426,7 @@ def cantitate():
 
     produs_exact = preferinte["Produs_Ales"]
     produsul_extras = check_price(produs_exact)
+    preferinte["PRODUS_EXTRAS"] = produsul_extras
     if language_saved == "RO":
         if "m2" in produsul_extras:
             masurare = "m2"
@@ -2134,32 +2445,147 @@ def cantitate():
     print("Produsul extras : " , produsul_extras)
     pret_produs = extrage_total_din_text(preferinte["Pret_Produs"])
     print("pret produs cantitate = ",pret_produs)
-
+    preferinte["Cantitate"] = cantitate
     nume_prenume_corect = extrage_nume_din_text(preferinte["Nume_Prenume"])
     preferinte["Nume_Prenume"] = nume_prenume_corect
     total = float(pret_produs) * float(cantitate)
+    preferinte["Pret_Produs_Extras"] = pret_produs
+    preferinte["Pret_Total"] = total
 
-    mesaj_telegram = (
-        f"👤 Nume Prenume: {nume_prenume_corect} \n"
-        f"📞 Numar de telefon: {preferinte['Numar_Telefon']} \n"
-        f"📦 Categoria: {preferinte['Categorie']} \n"
-        f"📦 Produs: {produs_exact} \n"
-        f"🎨 Culoare aleasă: {preferinte['Culoare_Aleasa']} \n"
-        f"💲 Preț unitar: {pret_produs:.2f} MDL \n"
-        f"📐 Cantitate: {cantitate} {masurare} \n"
-        f"🧮 Preț total: {total:.2f} MDL \n"
-    )
+    # mesaj_telegram = (
+    #     f"👤 Nume Prenume: {nume_prenume_corect} \n"
+    #     f"📞 Numar de telefon: {preferinte['Numar_Telefon']} \n"
+    #     f"📦 Categoria: {preferinte['Categorie']} \n"
+    #     f"📦 Produs: {produs_exact} \n"
+    #     f"🎨 Culoare aleasă: {preferinte['Culoare_Aleasa']} \n"
+    #     f"💲 Preț unitar: {pret_produs:.2f} MDL \n"
+    #     f"📐 Cantitate: {cantitate} {masurare} \n"
+    #     f"🧮 Preț total: {total:.2f} MDL \n"
+    # )
 
-    # Encode the message for the URL
-    mesaj_encodat = urllib.parse.quote(mesaj_telegram)
+    # # Encode the message for the URL
+    # mesaj_encodat = urllib.parse.quote(mesaj_telegram)
 
-    url = f"https://api.telegram.org/bot{TELEGRAM}/sendMessage?chat_id={CHAT_ID}&text={mesaj_encodat}"
-    response = requests.get(url)
+    # url = f"https://api.telegram.org/bot{TELEGRAM}/sendMessage?chat_id={CHAT_ID}&text={mesaj_encodat}"
+    # response = requests.get(url)
 
-    print_frumos = print_price(pret_produs,cantitate,produs_exact,preferinte["Culoare_Aleasa"], masurare, language_saved)
+    print_frumos = cantitate_afiseaza(pret_produs , cantitate , language_saved)
+    # print_frumos = print_price(pret_produs,cantitate,produs_exact,preferinte["Culoare_Aleasa"], masurare, language_saved)
 
     # print(print_frumos)
     return jsonify({"reply": print_frumos})
+
+
+@app.route("/check_resp", methods=["POST"])
+def check_resp():
+    masurare = ""
+    data = request.get_json()
+    name = data.get("name", "")
+    interests = data.get("interests", "")
+    message = data.get("message", "")
+    language_saved = data.get("language","")
+
+
+    response = check_response(message)
+
+    if response == "DA":
+        if (preferinte["Numar_Telefon"] == ""):
+            if language_saved == "RO":
+                reply = (
+                    "📞 Te rog să ne lași un <strong>număr de telefon</strong> pentru a putea <strong>înregistra cu succes comanda ta</strong> și a te contacta dacă este nevoie.<br><br>"
+                    "Te rugăm să te asiguri că numărul începe cu <strong>0</strong> sau <strong>+373</strong>. ✅"
+                )
+            else:
+                reply = (
+                    "📞 Пожалуйста, оставьте нам <strong>номер телефона</strong>, чтобы мы могли <strong>успешно зарегистрировать ваш заказ</strong> и связаться с вами при необходимости.<br><br>"
+                    "Пожалуйста, убедитесь, что номер начинается с <strong>0</strong> или <strong>+373</strong>. ✅"
+                )
+            return jsonify({"reply": reply})
+
+
+
+        produs_exact = preferinte["Produs_Ales"]
+        produsul_extras = preferinte["PRODUS_EXTRAS"]
+        if language_saved == "RO":
+            if "m2" in produsul_extras:
+                masurare = "m2"
+            elif "ml" in produsul_extras:
+                masurare = "ml"
+            elif "foaie" in produsul_extras:
+                masurare = "foi"
+        else:
+            if "м2" in produsul_extras:
+                masurare = "m2"
+            elif "мл" in produsul_extras:
+                masurare = "мл"
+            elif "лист" in produsul_extras or "бумаг" in produsul_extras:
+                masurare = "foi"
+        pret_produs = preferinte["Pret_Produs_Extras"]
+        nume_prenume_corect = preferinte["Nume_Prenume"]
+        total = preferinte["Pret_Total"]
+        cantitate = preferinte["Cantitate"]
+        mesaj_telegram = (
+            f"👤 Nume Prenume: {nume_prenume_corect} \n"
+            f"📞 Numar de telefon: {preferinte['Numar_Telefon']} \n"
+            f"📦 Categoria: {preferinte['Categorie']} \n"
+            f"📦 Produs: {produs_exact} \n"
+            f"🎨 Culoare aleasă: {preferinte['Culoare_Aleasa']} \n"
+            f"💲 Preț unitar: {pret_produs:.2f} MDL \n"
+            f"📐 Cantitate: {cantitate} {masurare} \n"
+            f"🧮 Preț total: {total:.2f} MDL \n"
+        )
+        mesaj_encodat = urllib.parse.quote(mesaj_telegram)
+
+        url = f"https://api.telegram.org/bot{TELEGRAM}/sendMessage?chat_id={CHAT_ID}&text={mesaj_encodat}"
+        response = requests.get(url)
+        print_frumos = print_price(pret_produs,cantitate,produs_exact,preferinte["Culoare_Aleasa"], masurare, language_saved)
+        return jsonify({"reply": print_frumos})
+
+    elif response == "NU":
+        if language_saved == "RO":
+            reply = (
+                "✅ <strong>Am înțeles</strong>, îți mulțumim mult pentru răspuns!<br><br>"
+                "📦 Dacă dorești mai multe <strong>detalii despre produse</strong> sau vrei să <strong>plasezi o altă comandă</strong>, suntem mereu aici să te ajutăm!<br><br>"
+                "✨ Îți dorim o zi excelentă și te așteptăm cu drag oricând!"
+            )
+        elif language_saved == "RU":
+            reply = (
+                "✅ <strong>Понятно</strong>, большое спасибо за ваш ответ!<br><br>"
+                "📦 Если вы хотите узнать больше <strong>о наших товарах</strong> или <strong>оформить новый заказ</strong> — мы всегда на связи и готовы помочь!<br><br>"
+                "✨ Желаем вам отличного дня и будем рады снова вас видеть!"
+            )
+    else:
+        if language_saved == "RO":
+            reply = (
+                "Nu spune niciodată „Salut”, gen toate chestiile introductive, pentru că noi deja ducem o discuție și ne cunoaștem. "
+                "Scrie un mesaj politicos, prietenos și natural, care:\n"
+                f"Răspunde pe scurt la ceea ce a spus utilizatorul {interests}.\n"
+                "2. Mesajul să fie scurt, cald, empatic și prietenos. "
+                "Nu mai mult de 2-3 propoziții.\n"
+                "Nu folosi ghilimele și nu explica ce faci – scrie doar mesajul pentru utilizator."
+            )
+            reply += (
+                "<br><br>✉️ Te rog să răspunzi cu <strong>DA</strong> sau <strong>NU</strong>, pentru a ști sigur dacă <strong>dorești să plasezi comanda</strong> în acest moment. "
+                "Este important pentru a putea continua procesarea cât mai rapid. ✅"
+            )
+        else:
+            reply = (
+                "Никогда не говори «Привет», как будто это первое наше общение, ведь мы уже общаемся и знакомы. "
+                "Напиши вежливое, дружелюбное и естественное сообщение, которое:\n"
+                f"Кратко отвечает на то, что сказал пользователь {interests}.\n"
+                "Сообщение должно быть коротким, тёплым, эмпатичным и дружелюбным. "
+                "Не больше 2–3 предложений.\n"
+                "Не используй кавычки и не объясняй, что делаешь — просто напиши сообщение для пользователя."
+            )
+            reply += (
+                "<br><br>✉️ Пожалуйста, ответьте <strong>ДА</strong> или <strong>НЕТ</strong>, чтобы мы точно поняли, <strong>хотите ли вы оформить заказ</strong> сейчас. "
+                "Это важно, чтобы мы могли оперативно продолжить обработку. ✅"
+            )
+    return jsonify({"reply": reply})
+
+            
+
+
 
 
 
@@ -2171,6 +2597,7 @@ def ask_with_ai(messages , temperature = 0.9 , max_tokens = 100):
         max_tokens=max_tokens
     )
     return response.choices[0].message.content.strip()
+
 
 @app.route("/")
 def home():

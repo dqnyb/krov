@@ -186,8 +186,8 @@ def function_check_product(interogare, produse , language):
     return rezultate
 
 
-interogare = "Профнастил HP&HA-7"
-function_check_product(interogare , produse, "RU")
+# interogare = "Профнастил HP&HA-7"
+# function_check_product(interogare , produse, "RU")
 
 
 
